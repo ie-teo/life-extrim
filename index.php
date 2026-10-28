@@ -42,12 +42,26 @@ $search_query = trim($_GET['q'] ?? '');
 
 // Helper function to extract first 2 sentences from HTML content
 function get_two_sentences($html_content) {
-    $text = strip_tags($html_content);
-    preg_match('/.*?[.!?](?:\s+|$)..*?[.!?](?:\s+|$)/u', $text, $matches);
-    if (!empty($matches[0])) {
-        return trim($matches[0]);
+    $text = html_entity_decode(strip_tags($html_content), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = trim(preg_replace('/\s+/u', ' ', $text));
+
+    if ($text === '') {
+        return '';
     }
-    return mb_substr($text, 0, 150) . '...';
+
+    // Use the first complete sentence when possible.
+    if (preg_match('/^.*?[.!?](?=\s|$)/u', $text, $matches)) {
+        $text = trim($matches[0]);
+    }
+
+    // Keep the description concise and avoid cutting in the middle of a word.
+    if (mb_strlen($text, 'UTF-8') > 160) {
+        $text = mb_substr($text, 0, 159, 'UTF-8');
+        $text = preg_replace('/\s+\S*$/u', '', $text);
+        $text = rtrim($text, " \t\n\r\0\x0B.,;:-") . '…';
+    }
+
+    return $text;
 }
 
 if (!empty($search_query)) {
@@ -122,12 +136,37 @@ if (!empty($search_query)) {
 } else {
     $view_type = '404';
 }
+
+// Build a page-specific meta description without requiring database changes.
+$meta_description = '';
+
+if ($view_type === 'post') {
+    $meta_description = get_two_sentences($current_post['content'] ?? '');
+    if ($meta_description === '') {
+        $meta_description = $current_post['title'] ?? 'Calisthenics article';
+    }
+} elseif ($view_type === 'page') {
+    $meta_description = get_two_sentences($current_page['content'] ?? '');
+    if ($meta_description === '') {
+        $meta_description = $current_page['title'] ?? 'Calisthenics training';
+    }
+} elseif ($view_type === 'category') {
+    $meta_description = ($current_category['title'] ?? 'Calisthenics') . ' - Explore calisthenics exercises, workout programs, and practical bodyweight training guides.';
+} elseif ($view_type === 'search') {
+    $meta_description = 'Search calisthenics articles, exercises, and workout guides on Life-extrim.ru.';
+} else {
+    $meta_description = 'Explore calisthenics exercises, workout programs, and bodyweight training guides on Life-extrim.ru.';
+}
+
+$meta_description = trim(preg_replace('/\s+/u', ' ', $meta_description));
+$meta_description = mb_substr($meta_description, 0, 160, 'UTF-8');
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="<?= htmlspecialchars($meta_description, ENT_QUOTES, 'UTF-8') ?>">
     <title>
         <?= $view_type === 'page' ? htmlspecialchars($current_page['title']) : '' ?>
         <?= $view_type === 'category' ? htmlspecialchars($current_category['title']) : '' ?>
@@ -153,6 +192,18 @@ if (!empty($search_query)) {
 </script>
 <noscript><div><img src="https://mc.yandex.ru/watch/113813591" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
 <!-- /Yandex.Metrika counter -->
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-N0SBR39TBZ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-N0SBR39TBZ');
+</script>
+
+
 </head>
 <body>
 
@@ -231,7 +282,7 @@ if (!empty($search_query)) {
 
             <section class="content-area">
                 <?php if ($view_type === 'page'): ?>
-                    <h1><?= htmlspecialchars($current_page['title']) ?></h1>
+                    
                     <div class="article-body">
                         <?= $current_page['content'] ?>
                     </div>
@@ -322,7 +373,7 @@ if (!empty($search_query)) {
                     <?php if (!empty($current_post['image'])): ?>
                         <img src="/<?= htmlspecialchars($current_post['image']) ?>" alt="" clss="img_style">
                     <?php endif; ?>
-                    <h1><?= htmlspecialchars($current_post['title']) ?></h1>
+                    
                     <div class="article-body">
                         <?= $current_post['content'] ?>
                     </div>
@@ -379,9 +430,15 @@ if (!empty($search_query)) {
                             </a>
                         </li>
                         <li><a href="https://ie.pinterest.com/ironlibs/" target="_blank" title="Pinterest"><i class="fa-brands fa-pinterest"></i></a></li>
-
-                        
-
+                        <!--
+                        <li>
+                            <a href="https://www.threads.com/@iron.lib" class="social-icon-btn" target="_blank" aria-label="Threads">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12.186 20.5c-4.42 0-7.7-3.18-7.7-7.9 0-4.82 3.65-8.1 8.35-8.1 4.35 0 7.6 2.78 7.75 6.78h-2.32c-.15-2.82-2.45-4.58-5.43-4.58-3.52 0-6.03 2.5-6.03 5.9 0 3.48 2.5 5.7 5.68 5.7 2.38 0 4.22-1.08 4.88-2.68h-3.12c-1.42 0-2.38-.78-2.38-1.95 0-1.22 1.02-2.02 2.62-2.02 2.48 0 4.12 1.32 4.12 3.78 0 3.42-2.55 5.07-6.4 5.07zm2.08-8.3c-.72 0-1.12.35-1.12.82 0 .45.38.78 1.05.78h1.32c-.08-.95-.52-1.6-1.25-1.6z"/>
+                              </svg>
+                            </a>
+                        </li>
+                        -->
                     </ul>
                 </div>
 
